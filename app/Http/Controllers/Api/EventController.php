@@ -2,38 +2,32 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
+use Illuminate\Routing\Controller;
+
+// use App\Http\Controllers\Controller;
 use App\Http\Resources\EventResource;
+use App\Http\Traits\canLoadRelations;
 use Illuminate\Http\Request;
 use App\Models\Event;
 
 class EventController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+
+    use canLoadRelations;
+    
+    private $relations = ['user', 'attendees', 'user.attendees'];
+    
+    public function __construct()
+    {   
+        $this->middleware('auth:sanctum')->except(['index', 'show']);
+    }
+    
     public function index()
     {
-        $query = Event::query();
-        $relations = ['user', 'attendees', 'user.attendees'];
-        foreach($relations as $relation) {
-            $query->when(
-                $this->shouldIncludeRelation($relation),
-                fn($q) => $q->with($relation)
-            );
-        }
+        $query = $this->loadRelationships(Event::query());
         return EventResource::collection(
             $query->latest()->paginate()
         );
-    }
-
-    protected function shouldIncludeRelation(string $relation): bool {
-        $include = request()->query('include');
-        if(!$include) {
-            return false;
-        }
-        $relations = array_map('trim', explode(',', $include));
-        return in_array($relation, $relations);
     }
 
     /**
@@ -51,9 +45,9 @@ class EventController extends Controller
 
         $event = Event::create([
             ...$validate,
-            'user_id' => '1'
+            'user_id' => $request->user()->id
         ]);
-        return new EventResource($event);
+        return new EventResource($this->loadRelationships($event));
     }
 
     /**
@@ -61,8 +55,7 @@ class EventController extends Controller
      */
     public function show(Event $event)
     {
-        $event->load('user', 'attendees');
-        return new EventResource($event);
+        return new EventResource($this->loadRelationships($event));
     }
 
     /**
@@ -78,7 +71,7 @@ class EventController extends Controller
             'user_id'
         ]);
         $event->update($validate);
-        return new EventResource($event);
+        return new EventResource($this->loadRelationships($event));
     }
 
     /**
